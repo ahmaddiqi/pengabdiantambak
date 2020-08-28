@@ -48,6 +48,18 @@ AutoConnect     portal(httpServer);
 #define waterlevelpin 32
 #define temppin 27
 
+//linear regression
+float a_pH = -30.7487;
+float b_pH = 171.4479;
+
+float a_turbidity = 3052.671667;
+float b_turbidity = 13.2855;
+
+float a_temp = -1.70;
+float b_temp = 1;
+
+float a_waterlevel = 1299.643;
+float b_waterlevel = 155.7143;
 
 void setup() {
   delay(1000);
@@ -120,16 +132,24 @@ void loop() {
   Serial.println("-------------------------------");
   Serial.println("proses baca data sensor pH mulai");
   int pHraw = analogRead(pHpin);
+  //linear regression for pH measurement
+  float pHcalc = (pHraw + a_pH) / b_pH;
   Serial.println("proses baca data sensor pH selesai");
   Serial.println("proses baca data sensor kekeruhan mulai");
   int turbidityraw = analogRead(turbiditypin);
+  //linear regression for turbidity measurement
+  float turbiditycalc = (turbidityraw - a_turbidity)/b_turbidity;
   Serial.println("proses baca data sensor kekeruhan selesai");
   Serial.println("proses baca data sensor suhu mulai");
   suhu.requestTemperatures();
   float tempraw = suhu.getTempCByIndex(0);
+  //linear regression for temperature measurement
+  float tempcalc = (tempraw - a_temp) / b_temp;
   Serial.println("proses baca data sensor suhu selesai");
   Serial.println("proses baca data sensor ketinggian mulai");
-  int waterlevelraw = analogRead(waterlevelpin); 
+  //linear regression for water level measurement
+  int waterlevelraw = analogRead(waterlevelpin);
+  float waterlevelcalc = (waterlevelraw- a_waterlevel)/b_waterlevel;
   Serial.println("proses baca data sensor ketinggian selesai");
   Serial.println("-----------------------------");
   Serial.println("");
