@@ -130,27 +130,32 @@ void loop() {
   ArduinoOTA.handle();
   Serial.println("Proses Baca Data Seluruh Sensor");
   Serial.println("-------------------------------");
+
   Serial.println("proses baca data sensor pH mulai");
   int pHraw = analogRead(pHpin);
   //linear regression for pH measurement
-  float pHcalc = (pHraw + a_pH) / b_pH;
+  pHcalc(pHraw,a_pH,b_pH);
   Serial.println("proses baca data sensor pH selesai");
+
   Serial.println("proses baca data sensor kekeruhan mulai");
   int turbidityraw = analogRead(turbiditypin);
   //linear regression for turbidity measurement
-  float turbiditycalc = (turbidityraw - a_turbidity)/b_turbidity;
+  turbiditycalc(turbidityraw,a_turbidity,b_turbidity);
   Serial.println("proses baca data sensor kekeruhan selesai");
+
   Serial.println("proses baca data sensor suhu mulai");
   suhu.requestTemperatures();
   float tempraw = suhu.getTempCByIndex(0);
   //linear regression for temperature measurement
-  float tempcalc = (tempraw - a_temp) / b_temp;
+  tempcalc(tempraw,a_temp,b_temp);
   Serial.println("proses baca data sensor suhu selesai");
+
   Serial.println("proses baca data sensor ketinggian mulai");
   //linear regression for water level measurement
   int waterlevelraw = analogRead(waterlevelpin);
-  float waterlevelcalc = (waterlevelraw- a_waterlevel)/b_waterlevel;
+  waterlevelcalc(waterlevelraw,a_waterlevel,b_waterlevel);
   Serial.println("proses baca data sensor ketinggian selesai");
+
   Serial.println("-----------------------------");
   Serial.println("");
   Serial.println("jarak pandang   =");
@@ -167,4 +172,28 @@ void printLocalTime()
     return;
   }
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
+
+float pHcalc(float raw, float a, float b){
+  float result;
+  result = (raw + a) / b;
+  return result;
+}
+
+float turbiditycalc(float raw, float a, float b){
+  float result;
+  result = (raw - a) / b;
+  return result;
+}
+
+float tempcalc(float raw, float a, float b){
+  float result;
+  result = (raw - a) / b;
+  return result;
+}
+
+float waterlevelcalc(float raw, float a, float b){
+  float result;
+  result = (raw - a) / b;
+  return result;
 }
