@@ -11,6 +11,11 @@ using HTTPUpdateServerClass = HTTPUpdateServer;
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include "time.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature suhu(&oneWire);
 
 struct tm timeinfo;
 
@@ -101,6 +106,7 @@ void setup() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   printLocalTime();
   
+  suhu.begin();
 }
 
 void loop() {
@@ -119,7 +125,8 @@ void loop() {
   int turbidityraw = analogRead(turbiditypin);
   Serial.println("proses baca data sensor kekeruhan selesai");
   Serial.println("proses baca data sensor suhu mulai");
-//  int tempraw = temppin
+  suhu.requestTemperatures();
+  float tempraw = suhu.getTempCByIndex(0);
   Serial.println("proses baca data sensor suhu selesai");
   Serial.println("proses baca data sensor ketinggian mulai");
   int waterlevelraw = analogRead(waterlevelpin); 
