@@ -38,10 +38,11 @@ AutoConnectAux  update("/update", "Update");
 AutoConnect     portal(httpServer);
 
 //define sensor
-#define pH 34
-#define turbidity 35
-#define waterlevel 32
-#define temp 27
+#define pHpin 34
+#define turbiditypin 35
+#define waterlevelpin 32
+#define temppin 27
+
 
 void setup() {
   delay(1000);
@@ -100,7 +101,6 @@ void setup() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   printLocalTime();
   
-  
 }
 
 void loop() {
@@ -110,28 +110,26 @@ void loop() {
   mDNSUpdate(MDNS);
   portal.handleClient();
   ArduinoOTA.handle();
-//  Serial.println((String)"DATA,DATE,TIME,"+analogRead(35)+",AUTOSCROLL_20");
-  delay(500);
   Serial.println("Proses Baca Data Seluruh Sensor");
   Serial.println("-------------------------------");
   Serial.println("proses baca data sensor pH mulai");
-  delay(500);
+  int pHraw = analogRead(pHpin);
   Serial.println("proses baca data sensor pH selesai");
   Serial.println("proses baca data sensor kekeruhan mulai");
-  delay(500);
+  int turbidityraw = analogRead(turbiditypin);
   Serial.println("proses baca data sensor kekeruhan selesai");
   Serial.println("proses baca data sensor suhu mulai");
-  delay(500);
+//  int tempraw = temppin
   Serial.println("proses baca data sensor suhu selesai");
   Serial.println("proses baca data sensor ketinggian mulai");
-  delay(500);
+  int waterlevelraw = analogRead(waterlevelpin); 
   Serial.println("proses baca data sensor ketinggian selesai");
   Serial.println("-----------------------------");
   Serial.println("");
-  Serial.println("jarak pandang   = 56,2cm");
-  Serial.println("pH              = 7,01");
-  Serial.println("ketinggian      = 3,4");
-  Serial.println("ketinggian      = 23,8 degree Celcius");
+  Serial.println("jarak pandang   =");
+  Serial.println("pH              =");
+  Serial.println("ketinggian      =");
+  Serial.println("ketinggian      =");
 }
 
 void printLocalTime()
