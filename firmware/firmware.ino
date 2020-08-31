@@ -13,6 +13,7 @@ using HTTPUpdateServerClass = HTTPUpdateServer;
 #include "time.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include "FirebaseESP32.h"
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature suhu(&oneWire);
@@ -42,6 +43,9 @@ AutoConnectAux  update("/update", "Update");
 // Declare AutoConnect and the custom web pages for an application sketch.
 AutoConnect     portal(httpServer);
 
+//deklarasi FirebaseESP32
+FirebaseData firebaseData;
+String configPath = "";
 //define sensor
 #define pHpin 34
 #define turbiditypin 35
@@ -119,6 +123,10 @@ void setup() {
   printLocalTime();
   
   suhu.begin();
+
+  Firebase.begin("pengabdian-tambak.firebaseio.com", "4OzLJPrPPyyPpEPjVNoDWcoEFca57KJAGnCSnywy");
+  Firebase.setMaxRetry(firebaseData, 5);
+
 }
 
 void loop() {
