@@ -14,9 +14,8 @@ using HTTPUpdateServerClass = HTTPUpdateServer;
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "FirebaseESP32.h"
+#include <FirebaseJson.h>
 
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature suhu(&oneWire);
 
 struct tm timeinfo;
 
@@ -42,10 +41,12 @@ AutoConnectAux  update("/update", "Update");
 
 // Declare AutoConnect and the custom web pages for an application sketch.
 AutoConnect     portal(httpServer);
+AutoConnectConfig Config;
 
 //deklarasi FirebaseESP32
 FirebaseData firebaseData;
-String configPath = "";
+String configPath = "/device/1/config";
+void printResult(FirebaseData &data);
 //define sensor
 #define pHpin 34
 #define turbiditypin 35
@@ -55,9 +56,11 @@ String configPath = "";
 //linear regression
 float a_pH = -30.7487;
 float b_pH = 171.4479;
+float weight_pH = 0.1;
 
 float a_turbidity = 3052.671667;
 float b_turbidity = 13.2855;
+float weight_turbidity = 0.5;
 
 float a_temp = -1.70;
 float b_temp = 1;
@@ -65,18 +68,36 @@ float b_temp = 1;
 float a_waterlevel = 1299.643;
 float b_waterlevel = 155.7143;
 
+String clockConfig[10];
+int longClock;
+
+OneWire oneWire(temppin);
+DallasTemperature suhu(&oneWire);
+
 void setup() {
   delay(1000);
   Serial.begin(115200);
   Serial.println("\nBooting Sketch...");
-
+  int timeOut = 60 ;//detik
+  while (WiFi.status() != WL_CONNECTED){
+    delay(1000);
+    Serial.print(".");
+    timeOut -= 1;
+    if(timeOut < 1){
+      break;
+    }
+  }
   // Prepare the ESP8266HTTPUpdateServer
   // The /update handler will be registered during this function.
   httpUpdater.setup(&httpServer, USERNAME, PASSWORD);
-
+  Config.autoReconnect = true;
+  Config.apid = "Pengabdian tambak - UM";
+  Config.psk = "tambak2020";
+  Config.title = "Pengabdian tambak - UM";
+  Config.retainPortal = true;
+  portal.config(Config);
   // Load a custom web page for a sketch and a dummy page for the updater.
   portal.join({ update });
-
   if (portal.begin()) {
     if (MDNS.begin(host)) {
         MDNS.addService("http", "tcp", HTTP_PORT);
@@ -89,7 +110,7 @@ void setup() {
 
   // OTA
   ArduinoOTA.setHostname("proyektambak");
-  ArduinoOTA.setPassword("admin");
+//  ArduinoOTA.setPassword("admin");
   ArduinoOTA
     .onStart([]() {
       String type;
@@ -130,25 +151,60 @@ void setup() {
 }
 
 void loop() {
-  // Sketches the application here.
-
   // Invokes mDNS::update and AutoConnect::handleClient() for the menu processing.
   mDNSUpdate(MDNS);
   portal.handleClient();
   ArduinoOTA.handle();
+
+  // proses ambil data konfigurasi dari web 
+    if (Firebase.getJSON(firebaseData,configPath)){
+      Serial.println("PASSED");
+      FirebaseJson &json = firebaseData.jsonObject();
+      FirebaseJsonData jsondata;
+      json.get(jsondata,"/updateTime");
+      if (jsondata.success){
+        FirebaseJsonArray jsonArray;
+        jsondata.getArray(jsonArray);
+        for (int i = 0; i < jsonArray.size(); i++){
+          jsonArray.get(jsondata, i);
+          clockConfig[i] = jsondata.stringValue;
+          longClock = i+1;
+          Serial.println(clockConfig[i]);
+        }
+        Serial.print("konfigurasi jam ada ");
+        Serial.println(longClock);
+      }
+    }
+    else{
+      Serial.println("FAILED");
+      Serial.println("REASON: " + firebaseData.errorReason());
+      Serial.println("------------------------------------");
+      Serial.println();
+    }
+    for (int x = 0; x < longClock; x++){
+
+    }
   Serial.println("Proses Baca Data Seluruh Sensor");
   Serial.println("-------------------------------");
 
   Serial.println("proses baca data sensor pH mulai");
-  int pHraw = analogRead(pHpin);
-  //linear regression for pH measurement
-  pHcalc(pHraw,a_pH,b_pH);
+  float pHrate;
+  for (int a = 0; a<100;a++){
+    int pHraw = analogRead(pHpin);
+    pHrate = weight_pH * pHraw + (1 - weight_pH) * pHrate;
+    delay(5);
+  }
+  pHcalc(pHrate,a_pH,b_pH); //linear regression for pH measurement
   Serial.println("proses baca data sensor pH selesai");
 
   Serial.println("proses baca data sensor kekeruhan mulai");
-  int turbidityraw = analogRead(turbiditypin);
-  //linear regression for turbidity measurement
-  turbiditycalc(turbidityraw,a_turbidity,b_turbidity);
+  float turbidityRate;
+    for (int a = 0; a<100;a++){
+    int turbidityRaw = analogRead(turbiditypin);
+    turbidityRate = weight_turbidity * turbidityRaw + (1 - weight_pH) * turbidityRate;
+    delay(5);
+  }
+  turbiditycalc(turbidityRate,a_turbidity,b_turbidity);   //linear regression for turbidity measurement
   Serial.println("proses baca data sensor kekeruhan selesai");
 
   Serial.println("proses baca data sensor suhu mulai");
