@@ -45,13 +45,19 @@ AutoConnectConfig Config;
 
 //deklarasi FirebaseESP32
 FirebaseData firebaseData;
+FirebaseJson jsonSensor;
 String configPath = "/device/1/config";
+String updatePath = "/device/realtime";
+String pushPath = "/device/data";
 void printResult(FirebaseData &data);
 //define sensor
 #define pHpin 34
 #define turbiditypin 35
 #define waterlevelpin 32
 #define temppin 27
+#define flushWaterpin 18
+#define cleanWaterpin 19
+#define tambakWaterpin 21
 
 //linear regression
 float a_pH = -30.7487;
@@ -74,11 +80,13 @@ int longClock;
 OneWire oneWire(temppin);
 DallasTemperature suhu(&oneWire);
 
+bool debug;
 void setup() {
   delay(1000);
   Serial.begin(115200);
   Serial.println("\nBooting Sketch...");
-  int timeOut = 60 ;//detik
+  int timeOut = 0 ;//detik
+  WiFi.begin();
   while (WiFi.status() != WL_CONNECTED){
     delay(1000);
     Serial.print(".");
@@ -146,8 +154,13 @@ void setup() {
   suhu.begin();
 
   Firebase.begin("pengabdian-tambak.firebaseio.com", "4OzLJPrPPyyPpEPjVNoDWcoEFca57KJAGnCSnywy");
-  Firebase.setMaxRetry(firebaseData, 5);
-
+  Firebase.setMaxRetry(firebaseData, 10);
+  Firebase.reconnectWiFi(true);
+  Firebase.setReadTimeout(firebaseData, 1000 * 60);
+  Firebase.setwriteSizeLimit(firebaseData, "tiny");
+  pinMode(flushWaterpin,OUTPUT);
+  pinMode(cleanWaterpin,OUTPUT);
+  pinMode(tambakWaterpin,OUTPUT);
 }
 
 void loop() {
@@ -161,6 +174,11 @@ void loop() {
       Serial.println("PASSED");
       FirebaseJson &json = firebaseData.jsonObject();
       FirebaseJsonData jsondata;
+      json.get(jsondata,"/debug");
+      if (jsondata.success){
+      debug = (jsondata.boolValue ? true : false);
+      Serial.println(debug); 
+      }
       json.get(jsondata,"/updateTime");
       if (jsondata.success){
         FirebaseJsonArray jsonArray;
@@ -182,50 +200,100 @@ void loop() {
       Serial.println();
     }
     for (int x = 0; x < longClock; x++){
+      while (!getLocalTime(&timeinfo)){
+      }
+      int hour, minute;
+      hour = clockConfig[x].substring(0,2).toInt();
+      minute = clockConfig[x].substring(3,5).toInt();
+      Serial.print("check jam ");
+      Serial.print(hour);
+      Serial.print(":");
+      Serial.println(minute);
+      Serial.print("sekarang jam ");
+      Serial.print(timeinfo.tm_hour);
+      Serial.print(":");
+      Serial.println(timeinfo.tm_min);
+      if (hour == timeinfo.tm_hour && minute == timeinfo.tm_min){
+        if (debug != true){
+          flushWater(true); // buang air sekarang
+          Serial.println("kran pembuangan dibuka");
+          while (checklevel() > 1){
+          }
+          flushWater(false); //tutup kran
+          Serial.println("kran pembuangan ditutup");
+          Serial.println("aktuator tambak dibuka");
+          sampleTambak(true); //buka kran tambak
+          while(checklevel() < 3){
+          }
+          sampleTambak(false); //tutup kran tambak
+          Serial.println("aktuator tambak ditutup");
+        }        
+        Serial.println("Proses Baca Data Seluruh Sensor");
+        Serial.println("-------------------------------");
 
+        Serial.println("proses baca data sensor pH mulai");
+        float pHrate;
+        for (int a = 0; a<100;a++){
+          int pHraw = analogRead(pHpin);
+          pHrate = weight_pH * pHraw + (1 - weight_pH) * pHrate;
+          delay(20);
+        }
+        float pH = pHcalc(pHrate,a_pH,b_pH); //linear regression for pH measurement
+        jsonSensor.add("pH",String(pH)); 
+        Serial.println("proses baca data sensor pH selesai");
+
+        Serial.println("proses baca data sensor kekeruhan mulai");
+        float turbidityRate;
+          for (int a = 0; a<100;a++){
+          int turbidityRaw = analogRead(turbiditypin);
+          turbidityRate = weight_turbidity * turbidityRaw + (1 - weight_pH) * turbidityRate;
+          delay(20);
+        }
+        float turbidity = turbiditycalc(turbidityRate,a_turbidity,b_turbidity);   //linear regression for turbidity measurement
+        jsonSensor.add("turbidity",String(turbidity));
+        Serial.println("proses baca data sensor kekeruhan selesai");
+
+        Serial.println("proses baca data sensor suhu mulai");
+        delay(2000);
+        suhu.requestTemperatures();
+        float tempraw = suhu.getTempCByIndex(0);
+        //linear regression for temperature measurement
+        float temperature = tempcalc(tempraw,a_temp,b_temp);
+        jsonSensor.add("temperature",String(temperature));
+        Serial.println("proses baca data sensor suhu selesai");
+
+        String years = String(timeinfo.tm_year + 1900);
+        String datetime = String(years + "-" + (checktime(timeinfo.tm_mon + 1)) + "-" + (checktime(timeinfo.tm_mday)) + "T" + (checktime(timeinfo.tm_hour)) + ":" + (checktime(timeinfo.tm_min)) + ":" + (checktime(timeinfo.tm_sec))+ "+07:00");
+        jsonSensor.add("date",datetime);
+        if (Firebase.updateNode(firebaseData,updatePath,jsonSensor)){
+          Serial.println("UPDATE NODE PASSED");
+        }
+        else{
+          Serial.println("failed update");
+        }
+
+        if (Firebase.pushJSON(firebaseData,pushPath,jsonSensor)){
+          Serial.println("PUSH NODE PASSED");
+        }
+        else{
+          Serial.println("failed to push");
+        }
+        if(debug != true){
+          flushWater(true); // buang air sekarang
+          while (checklevel() < 1){
+          }
+          flushWater(false); //tutup kran
+          cleanWater(true); //buka kran air bersih
+          while(checklevel() > 3){
+          }
+          cleanWater(false); //tutup kran air bersih
+        }
+        while(hour == timeinfo.tm_hour && minute == timeinfo.tm_min){
+          getLocalTime(&timeinfo);
+        }
+      }
     }
-  Serial.println("Proses Baca Data Seluruh Sensor");
-  Serial.println("-------------------------------");
-
-  Serial.println("proses baca data sensor pH mulai");
-  float pHrate;
-  for (int a = 0; a<100;a++){
-    int pHraw = analogRead(pHpin);
-    pHrate = weight_pH * pHraw + (1 - weight_pH) * pHrate;
-    delay(5);
-  }
-  pHcalc(pHrate,a_pH,b_pH); //linear regression for pH measurement
-  Serial.println("proses baca data sensor pH selesai");
-
-  Serial.println("proses baca data sensor kekeruhan mulai");
-  float turbidityRate;
-    for (int a = 0; a<100;a++){
-    int turbidityRaw = analogRead(turbiditypin);
-    turbidityRate = weight_turbidity * turbidityRaw + (1 - weight_pH) * turbidityRate;
-    delay(5);
-  }
-  turbiditycalc(turbidityRate,a_turbidity,b_turbidity);   //linear regression for turbidity measurement
-  Serial.println("proses baca data sensor kekeruhan selesai");
-
-  Serial.println("proses baca data sensor suhu mulai");
-  suhu.requestTemperatures();
-  float tempraw = suhu.getTempCByIndex(0);
-  //linear regression for temperature measurement
-  tempcalc(tempraw,a_temp,b_temp);
-  Serial.println("proses baca data sensor suhu selesai");
-
-  Serial.println("proses baca data sensor ketinggian mulai");
-  //linear regression for water level measurement
-  int waterlevelraw = analogRead(waterlevelpin);
-  waterlevelcalc(waterlevelraw,a_waterlevel,b_waterlevel);
-  Serial.println("proses baca data sensor ketinggian selesai");
-
-  Serial.println("-----------------------------");
-  Serial.println("");
-  Serial.println("jarak pandang   =");
-  Serial.println("pH              =");
-  Serial.println("ketinggian      =");
-  Serial.println("ketinggian      =");
+    delay(1000);
 }
 
 void printLocalTime()
@@ -260,4 +328,51 @@ float waterlevelcalc(float raw, float a, float b){
   float result;
   result = (raw - a) / b;
   return result;
+}
+
+void flushWater(bool Switch){
+  if (Switch == true){
+    digitalWrite(flushWaterpin,HIGH);
+  }
+  else{
+    digitalWrite(flushWaterpin,LOW);
+  }
+}
+
+void sampleTambak(bool Switch){
+  if (Switch == true){
+    digitalWrite(tambakWaterpin,HIGH);
+  }
+  else{
+    digitalWrite(tambakWaterpin,LOW);
+  }
+}
+
+void cleanWater(bool Switch){
+  if (Switch == true){
+    digitalWrite(cleanWaterpin,HIGH);
+  }
+  else{
+    digitalWrite(cleanWaterpin,LOW);
+  }
+}
+
+float checklevel(){
+  int waterlevelraw ;
+  for(int i = 0; i < 10; i++){
+    waterlevelraw = (analogRead(waterlevelpin) + waterlevelraw) / 2;
+  }
+  return waterlevelcalc(waterlevelraw,a_waterlevel,b_waterlevel);
+}
+
+String checktime (int check){
+  String aftercheck;
+  if(check < 10){
+    aftercheck = String(String(0) + check);
+    return aftercheck;
+  }
+  else { //if (check >= 10)
+    aftercheck = String(check);
+    return aftercheck;
+  }
 }
