@@ -15,7 +15,7 @@ using HTTPUpdateServerClass = HTTPUpdateServer;
 #include <DallasTemperature.h>
 #include "FirebaseESP32.h"
 #include <FirebaseJson.h>
-
+#include <NewPing.h>
 
 struct tm timeinfo;
 
@@ -79,6 +79,12 @@ int longClock;
 
 OneWire oneWire(temppin);
 DallasTemperature suhu(&oneWire);
+
+#define TRIGGER_PIN  4  // Arduino pin tied to trigger pin on the ultrasonic sensor.
+#define ECHO_PIN     2  // Arduino pin tied to echo pin on the ultrasonic sensor.
+#define MAX_DISTANCE 30 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
+
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 
 bool debug;
 void setup() {
@@ -217,13 +223,13 @@ void loop() {
         if (debug != true){
           flushWater(true); // buang air sekarang
           Serial.println("kran pembuangan dibuka");
-          while (checklevel() > 1){
+          while (checklevel() <18){
           }
           flushWater(false); //tutup kran
           Serial.println("kran pembuangan ditutup");
           Serial.println("aktuator tambak dibuka");
           sampleTambak(true); //buka kran tambak
-          while(checklevel() < 3){
+          while(checklevel() > 10){
           }
           sampleTambak(false); //tutup kran tambak
           Serial.println("aktuator tambak ditutup");
@@ -324,11 +330,6 @@ float tempcalc(float raw, float a, float b){
   return result;
 }
 
-float waterlevelcalc(float raw, float a, float b){
-  float result;
-  result = (raw - a) / b;
-  return result;
-}
 
 void flushWater(bool Switch){
   if (Switch == true){
@@ -358,11 +359,22 @@ void cleanWater(bool Switch){
 }
 
 float checklevel(){
-  int waterlevelraw ;
+  int waterlevelraw,zero = 0;
   for(int i = 0; i < 10; i++){
-    waterlevelraw = (analogRead(waterlevelpin) + waterlevelraw) / 2;
+    if(sonar.ping_cm() > 0){
+      waterlevelraw = (sonar.ping_cm() + waterlevelraw) / 2;
+      delay(35);
+    }
+    else if(sonar.ping_cm() == 0){
+      zero++;
+    }
   }
-  return waterlevelcalc(waterlevelraw,a_waterlevel,b_waterlevel);
+  if(zero >8){
+    flushWater(true);
+    Serial.println("error, membuka kran");
+    delay(3000);
+  }
+  return waterlevelraw;
 }
 
 String checktime (int check){
