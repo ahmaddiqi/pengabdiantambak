@@ -53,7 +53,6 @@ void printResult(FirebaseData &data);
 //define sensor
 #define pHpin 34
 #define turbiditypin 35
-#define waterlevelpin 32
 #define temppin 27
 #define flushWaterpin 18
 #define cleanWaterpin 19
@@ -64,15 +63,13 @@ float a_pH = -30.7487;
 float b_pH = 171.4479;
 float weight_pH = 0.1;
 
-float a_turbidity = 3052.671667;
-float b_turbidity = 13.2855;
+float a_turbidity = 2242.857143;
+float b_turbidity = 8.571428571;
 float weight_turbidity = 0.5;
 
 float a_temp = -1.70;
 float b_temp = 1;
 
-float a_waterlevel = 1299.643;
-float b_waterlevel = 155.7143;
 
 String clockConfig[10];
 int longClock;
@@ -82,12 +79,18 @@ DallasTemperature suhu(&oneWire);
 
 #define TRIGGER_PIN  4  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     2  // Arduino pin tied to echo pin on the ultrasonic sensor.
-#define MAX_DISTANCE 30 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
+#define MAX_DISTANCE 20 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 
 bool debug;
 void setup() {
+  pinMode(flushWaterpin,OUTPUT);
+  pinMode(cleanWaterpin,OUTPUT);
+  pinMode(tambakWaterpin,OUTPUT);
+  digitalWrite(flushWaterpin,HIGH);
+  digitalWrite(cleanWaterpin,LOW);
+  digitalWrite(tambakWaterpin,HIGH);
   delay(1000);
   Serial.begin(115200);
   Serial.println("\nBooting Sketch...");
@@ -124,7 +127,7 @@ void setup() {
 
   // OTA
   ArduinoOTA.setHostname("proyektambak");
-//  ArduinoOTA.setPassword("admin");
+  ArduinoOTA.setPassword("admin");
   ArduinoOTA
     .onStart([]() {
       String type;
@@ -164,9 +167,6 @@ void setup() {
   Firebase.reconnectWiFi(true);
   Firebase.setReadTimeout(firebaseData, 1000 * 60);
   Firebase.setwriteSizeLimit(firebaseData, "tiny");
-  pinMode(flushWaterpin,OUTPUT);
-  pinMode(cleanWaterpin,OUTPUT);
-  pinMode(tambakWaterpin,OUTPUT);
 }
 
 void loop() {
@@ -238,24 +238,33 @@ void loop() {
         Serial.println("-------------------------------");
 
         Serial.println("proses baca data sensor pH mulai");
-        float pHrate;
-        for (int a = 0; a<100;a++){
+        float pHrate = 0;
+        for (int a = 0; a<150;a++){
           int pHraw = analogRead(pHpin);
           pHrate = weight_pH * pHraw + (1 - weight_pH) * pHrate;
+          Serial.println(pHraw);
           delay(20);
         }
         float pH = pHcalc(pHrate,a_pH,b_pH); //linear regression for pH measurement
+        
+        Serial.print("nilai pHnya adalah ");
+        Serial.println(pH);
         jsonSensor.add("pH",String(pH)); 
         Serial.println("proses baca data sensor pH selesai");
 
         Serial.println("proses baca data sensor kekeruhan mulai");
-        float turbidityRate;
+        float turbidityRate = 0;
           for (int a = 0; a<100;a++){
           int turbidityRaw = analogRead(turbiditypin);
-          turbidityRate = weight_turbidity * turbidityRaw + (1 - weight_pH) * turbidityRate;
+          turbidityRate = weight_turbidity * turbidityRaw + (1 - weight_turbidity) * turbidityRate;
+          Serial.println(turbidityRaw);
           delay(20);
         }
+        Serial.println("nilai rata-rata ADC kekeruhan");
+        Serial.print(turbidityRate);
         float turbidity = turbiditycalc(turbidityRate,a_turbidity,b_turbidity);   //linear regression for turbidity measurement
+        Serial.print("nilai kekeruhannya adalah ");
+        Serial.println(turbidity);
         jsonSensor.add("turbidity",String(turbidity));
         Serial.println("proses baca data sensor kekeruhan selesai");
 
@@ -263,6 +272,8 @@ void loop() {
         delay(2000);
         suhu.requestTemperatures();
         float tempraw = suhu.getTempCByIndex(0);
+        Serial.print(tempraw);
+        Serial.println(" derajat celcius");
         //linear regression for temperature measurement
         float temperature = tempcalc(tempraw,a_temp,b_temp);
         jsonSensor.add("temperature",String(temperature));
@@ -286,13 +297,17 @@ void loop() {
         }
         if(debug != true){
           flushWater(true); // buang air sekarang
-          while (checklevel() < 1){
+          Serial.println("kran pembuangan dibuka");
+          while (checklevel() <18){
           }
           flushWater(false); //tutup kran
+          Serial.println("kran pembuangan ditutup");
+          Serial.println("aktuator air bersih dibuka");
           cleanWater(true); //buka kran air bersih
-          while(checklevel() > 3){
+          while(checklevel() > 10){
           }
           cleanWater(false); //tutup kran air bersih
+          Serial.println("aktuator air bersih ditutup");
         }
         while(hour == timeinfo.tm_hour && minute == timeinfo.tm_min){
           getLocalTime(&timeinfo);
@@ -333,19 +348,19 @@ float tempcalc(float raw, float a, float b){
 
 void flushWater(bool Switch){
   if (Switch == true){
-    digitalWrite(flushWaterpin,HIGH);
+    digitalWrite(flushWaterpin,LOW);
   }
   else{
-    digitalWrite(flushWaterpin,LOW);
+    digitalWrite(flushWaterpin,HIGH);
   }
 }
 
 void sampleTambak(bool Switch){
   if (Switch == true){
-    digitalWrite(tambakWaterpin,HIGH);
+    digitalWrite(tambakWaterpin,LOW);
   }
   else{
-    digitalWrite(tambakWaterpin,LOW);
+    digitalWrite(tambakWaterpin,HIGH);
   }
 }
 
@@ -359,21 +374,19 @@ void cleanWater(bool Switch){
 }
 
 float checklevel(){
-  int waterlevelraw,zero = 0;
+  int waterlevelraw = 0;
   for(int i = 0; i < 10; i++){
-    if(sonar.ping_cm() > 0){
-      waterlevelraw = (sonar.ping_cm() + waterlevelraw) / 2;
-      delay(35);
+    int jarak = sonar.ping_cm();
+    if( jarak > 0 && jarak < 30){
+      waterlevelraw = (jarak + waterlevelraw) / 2;
+      delay(50);
     }
-    else if(sonar.ping_cm() == 0){
-      zero++;
+    else{
+      i--;
     }
   }
-  if(zero >8){
-    flushWater(true);
-    Serial.println("error, membuka kran");
-    delay(3000);
-  }
+  Serial.print("estimasi air ");
+  Serial.println(waterlevelraw);
   return waterlevelraw;
 }
 
