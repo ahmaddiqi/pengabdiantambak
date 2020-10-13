@@ -63,8 +63,8 @@ float a_pH = -30.7487;
 float b_pH = 171.4479;
 float weight_pH = 0.1;
 
-float a_turbidity = 2242.857143;
-float b_turbidity = 8.571428571;
+float a_turbidity = 1362.84112746429;
+float b_turbidity = 13.0205945928571;
 float weight_turbidity = 0.5;
 
 float a_temp = -1.70;
